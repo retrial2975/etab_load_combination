@@ -4,8 +4,13 @@ import numpy as np
 import re
 
 # --- ส่วนของการคำนวณ ---
-# (ฟังก์ชัน calculate_combinations เหมือนเดิมทุกประการ)
-def calculate_combinations(df, custom_story_name=None):
+def calculate_combinations(df_input, custom_story_name=None):
+    """
+    ฟังก์ชันสำหรับคำนวณ Load Combination จาก DataFrame ที่รับเข้ามา
+    """
+    # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: สร้างสำเนาข้อมูลที่ชัดเจน <<<<<<<<<<<<<<<<<<<<
+    df = df_input.copy()
+    
     value_cols = ['P', 'V2', 'V3', 'T', 'M2', 'M3']
     group_cols = ['Story', 'Column', 'Unique Name', 'Station']
     
@@ -64,13 +69,10 @@ def calculate_combinations(df, custom_story_name=None):
     return result_df
 
 # --- ส่วนของหน้าเว็บ Streamlit ---
-
+# (ส่วนนี้เหมือนเดิมทุกประการ)
 st.set_page_config(layout="wide")
 st.title('โปรแกรมคำนวณ Load Combination 🏗️')
-
 st.write("อัปโหลดไฟล์ `load.csv` ของคุณเพื่อคำนวณ Load Combination")
-
-# <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: เพิ่มคำอธิบายก่อนอัปโหลด <<<<<<<<<<<<<<<<<<<<
 st.info(
     """
     **ข้อแนะนำ:** ไฟล์ CSV ของคุณควรมีคอลัมน์หลักดังต่อไปนี้เพื่อให้โปรแกรมทำงานได้อย่างถูกต้อง:
@@ -82,8 +84,6 @@ st.info(
     - **`P`, `V2`, `V3`, `T`, `M2`, `M3`**: ค่าแรงในแกนต่างๆ
     """
 )
-# <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
-
 uploaded_file = st.file_uploader("เลือกไฟล์ load.csv", type=['csv'])
 
 if uploaded_file is not None:
@@ -91,7 +91,6 @@ if uploaded_file is not None:
         input_df = pd.read_csv(uploaded_file)
         st.success("✔️ อัปโหลดไฟล์สำเร็จแล้ว!")
         
-        # (ส่วนที่เหลือของโค้ดเหมือนเดิมทั้งหมด)
         if 'main_result_df' not in st.session_state:
             st.session_state.main_result_df = None
         if 'ug_result_df' not in st.session_state:
@@ -102,7 +101,7 @@ if uploaded_file is not None:
 
         st.header("1. ผลการคำนวณ Load Combinations (U01 - U09)")
         with st.spinner('กำลังคำนวณ Load Combinations... ⏳'):
-            st.session_state.main_result_df = calculate_combinations(input_df.copy())
+            st.session_state.main_result_df = calculate_combinations(input_df)
         
         st.success("✔️ คำนวณเสร็จสิ้น!")
 
@@ -135,7 +134,7 @@ if uploaded_file is not None:
                 factor_live = float(factor_live_str)
                 
                 with st.spinner('กำลังสร้างข้อมูลชั้นใต้ดิน... ⏳'):
-                    base_floor_df = input_df[input_df['Story'] == base_story].copy()
+                    base_floor_df = input_df[input_df['Story'] == base_story]
                     value_cols_ug = ['P', 'V2', 'V3', 'T', 'M2', 'M3']
                     factors_map = {'Dead': factor_dead, 'SDL': factor_sdl, 'Live': factor_live}
 
