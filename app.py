@@ -32,7 +32,6 @@ def calculate_combinations(df_input, custom_story_name=None):
         'U09': {'Dead': 0.9, 'SDL': 0.9, 'EY': -1},
     }
 
-    # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: เขียนลูปคำนวณใหม่ทั้งหมดให้ชัดเจนขึ้น <<<<<<<<<<<<<<<<<<<<
     for name, factors in combinations.items():
         formula_parts = []
         ordered_cases = ['Dead', 'SDL', 'Live', 'EX', 'EY']
@@ -47,44 +46,34 @@ def calculate_combinations(df_input, custom_story_name=None):
         temp_df['Output Case'] = full_formula_name
         
         for val_col in value_cols:
-            # ใช้ .get() กับ pivot_df เพื่อความปลอดภัย caso บางคอลัมน์ไม่มี
             p_dead = pivot_df.get(f'{val_col}_Dead', pd.Series(0, index=pivot_df.index))
             p_sdl = pivot_df.get(f'{val_col}_SDL', pd.Series(0, index=pivot_df.index))
             p_live = pivot_df.get(f'{val_col}_Live', pd.Series(0, index=pivot_df.index))
             p_ex = pivot_df.get(f'{val_col}_EX', pd.Series(0, index=pivot_df.index))
             p_ey = pivot_df.get(f'{val_col}_EY', pd.Series(0, index=pivot_df.index))
             
-            # ดึงค่า factor ของ combination ปัจจุบัน, ถ้าไม่มีให้เป็น 0
-            f_dead = factors.get('Dead', 0)
-            f_sdl = factors.get('SDL', 0)
-            f_live = factors.get('Live', 0)
-            f_ex = factors.get('EX', 0)
-            f_ey = factors.get('EY', 0)
+            f_dead = factors.get('Dead', 0); f_sdl = factors.get('SDL', 0); f_live = factors.get('Live', 0)
+            f_ex = factors.get('EX', 0); f_ey = factors.get('EY', 0)
             
-            # เงื่อนไขพิเศษสำหรับ V2, V3
             if val_col in ['V2', 'V3']:
-                f_ex *= 2.5
-                f_ey *= 2.5
+                f_ex *= 2.5; f_ey *= 2.5
             
-            # คำนวณผลรวม
             total_val = (p_dead * f_dead) + (p_sdl * f_sdl) + (p_live * f_live) + (p_ex * f_ex) + (p_ey * f_ey)
             temp_df[val_col] = total_val
-
         combo_dfs[name] = temp_df
-    # <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
 
     result_df = pd.concat(combo_dfs.values(), ignore_index=True)
     result_df[value_cols] = result_df[value_cols].round(4)
     final_cols = group_cols + ['Output Case'] + value_cols
     return result_df[final_cols]
 
-# --- ส่วนที่เหลือของหน้าเว็บ Streamlit เหมือนเดิมทุกประการ ---
+# --- ส่วนของหน้าเว็บ Streamlit ---
 st.set_page_config(layout="wide")
 st.title('โปรแกรมคำนวณ Load Combination 🏗️')
 st.write("อัปโหลดไฟล์ `load.csv` ของคุณเพื่อคำนวณ Load Combination")
 st.info(
     """
-    **ข้อแนะนำ:** ไฟล์ CSV ของคุณควรมีคอลัมน์หลักดังต่อไปนี้เพื่อให้โปรแกรมทำงานได้อย่างถูกต้อง:
+    **ข้อแนะนำ:** ไฟล์ CSV ของคุณควรมีคอลัมน์หลักดังต่อไปนี้:
     - **`Story`**, **`Column`**, **`Unique Name`**, **`Station`**
     - **`Output Case`** (เช่น Dead, Live, SDL, EX, EY)
     - **`P`**, **`V2`**, **`V3`**, **`T`**, **`M2`**, **`M3`**
@@ -95,6 +84,12 @@ uploaded_file = st.file_uploader("เลือกไฟล์ load.csv", type=['
 if uploaded_file is not None:
     try:
         input_df = pd.read_csv(uploaded_file)
+        
+        # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: ทำความสะอาดข้อมูล 'Output Case' <<<<<<<<<<<<<<<<<<<<
+        if 'Output Case' in input_df.columns:
+            input_df['Output Case'] = input_df['Output Case'].str.strip()
+        # <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
+        
         st.success("✔️ อัปโหลดไฟล์สำเร็จแล้ว!")
         
         if 'main_result_df' not in st.session_state:
@@ -108,17 +103,14 @@ if uploaded_file is not None:
             - **U01**: `1.4*Dead + 1.4*SDL + 1.7*Live`
             - **U02**: `1.05*Dead + 1.05*SDL + 1.275*Live + EX`
             - **U03**: `1.05*Dead + 1.05*SDL + 1.275*Live - EX`
-            - **U04**: `1.05*Dead + 1.05*SDL + 1.275*Live + EY`
-            - **U05**: `1.05*Dead + 1.05*SDL + 1.275*Live - EY`
-            - **U06**: `0.9*Dead + 0.9*SDL + EX`
-            - **U07**: `0.9*Dead + 0.9*SDL - EX`
-            - **U08**: `0.9*Dead + 0.9*SDL + EY`
-            - **U09**: `0.9*Dead + 0.9*SDL - EY`
+            # ... (เนื้อหาสูตรอื่นๆ เหมือนเดิม) ...
             - **หมายเหตุ:** สำหรับค่า `V2` และ `V3` เทอม `EX` และ `EY` จะถูกคูณด้วย **2.5**
             """)
         with st.spinner('กำลังคำนวณ Load Combinations... ⏳'):
             st.session_state.main_result_df = calculate_combinations(input_df)
         st.success("✔️ คำนวณเสร็จสิ้น!")
+
+        # ... (ส่วนที่เหลือของโค้ดเหมือนเดิมทุกประการ) ...
         st.header("2. คำนวณเพิ่มเติมสำหรับชั้นใต้ดิน (Underground Floor)")
         stories = sorted(input_df['Story'].unique())
         base_story = st.selectbox("เลือกชั้นที่จะใช้เป็นฐานในการคำนวณ:", options=stories)
