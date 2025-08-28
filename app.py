@@ -2,33 +2,25 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-# ฟังก์ชันสำหรับคำนวณ Load Combination
-def calculate_combinations(df):
+# --- ส่วนของการคำนวณ ---
+
+def calculate_combinations(df, custom_story_name=None):
     """
     ฟังก์ชันสำหรับคำนวณ Load Combination จาก DataFrame ที่รับเข้ามา
-    โดยทำการ Group by 'Story', 'Column', 'Unique Name', 'Station'
-    แล้วคำนวณค่าใหม่ตามสูตร U01, U02, U03
+    - df: DataFrame ข้อมูลดิบ
+    - custom_story_name: ชื่อ Story ที่จะใช้สำหรับผลลัพธ์ (กรณีชั้นใต้ดิน)
     """
-    # เลือกเฉพาะคอลัมน์ที่จำเป็นสำหรับการคำนวณ
     value_cols = ['P', 'V2', 'V3', 'T', 'M2', 'M3']
     group_cols = ['Story', 'Column', 'Unique Name', 'Station']
     
-    # Pivot table เพื่อให้ Output Case กลายเป็นคอลัมน์
-    # ทำให้ง่ายต่อการคำนวณในแต่ละแถว
-    pivot_df = df.pivot_table(index=group_cols,
-                              columns='Output Case',
-                              values=value_cols,
-                              fill_value=0) # เติม 0 ในช่องที่ไม่มีข้อมูล
-
-    # จัดการกับ Multi-level columns ที่เกิดจาก Pivot
-    pivot_df.columns = ['_'.join(col).strip() for col in pivot_df.columns.values]
+    # ถ้ามีการระบุชื่อ Story ใหม่ (สำหรับชั้นใต้ดิน) ให้ใช้ชื่อนั้น
+    if custom_story_name:
+        df['Story'] = custom_story_name
+        
+    pivot_df = df.pivot_table(index=group_cols, columns='Output Case', values=value_cols, fill_value=0)
+    pivot_df.columns = ['_'.join(map(str, col)).strip() for col in pivot_df.columns.values]
     pivot_df.reset_index(inplace=True)
 
-    # --- การคำนวณ Load Combinations ---
-    # สร้าง Dictionary เพื่อเก็บ DataFrame ของแต่ละ Combination
-    combo_dfs = {}
-
-    # ตรวจสอบว่ามีคอลัมน์ที่ต้องใช้คำนวณหรือไม่ ถ้าไม่มีให้สร้างและใส่ค่า 0
     required_cases = ['Dead', 'SDL', 'Live', 'EX', 'EY']
     for case in required_cases:
         for val in value_cols:
@@ -36,42 +28,47 @@ def calculate_combinations(df):
             if col_name not in pivot_df.columns:
                 pivot_df[col_name] = 0
 
-    # คำนวณ U01: 1.4*Dead + 1.4*SDL + 1.7*Live
-    df_u01 = pivot_df[group_cols].copy()
-    df_u01['Output Case'] = 'U01'
-    for val in value_cols:
-        df_u01[val] = (1.4 * pivot_df[f'{val}_Dead'] +
-                       1.4 * pivot_df[f'{val}_SDL'] +
-                       1.7 * pivot_df[f'{val}_Live'])
-    combo_dfs['U01'] = df_u01
+    combo_dfs = {}
+    
+    # --- นิยามสูตรและเงื่อนไข ---
+    combinations = {
+        'U01': {'Dead': 1.4, 'SDL': 1.4, 'Live': 1.7, 'EX': 0, 'EY': 0},
+        'U02': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EX': 1, 'EY': 0},
+        'U03': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EX': -1, 'EY': 0},
+        'U04': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EX': 0, 'EY': 1},
+        'U05': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EX': 0, 'EY': -1},
+        'U06': {'Dead': 0.9, 'SDL': 0.9, 'Live': 0, 'EX': 1, 'EY': 0},
+        'U07': {'Dead': 0.9, 'SDL': 0.9, 'Live': 0, 'EX': -1, 'EY': 0},
+        'U08': {'Dead': 0.9, 'SDL': 0.9, 'Live': 0, 'EX': 0, 'EY': 1},
+        'U09': {'Dead': 0.9, 'SDL': 0.9, 'Live': 0, 'EX': 0, 'EY': -1},
+    }
 
-    # คำนวณ U02: 1.05*Dead + 1.05*SDL + 1.275*Live + EX
-    df_u02 = pivot_df[group_cols].copy()
-    df_u02['Output Case'] = 'U02'
-    for val in value_cols:
-        df_u02[val] = (1.05 * pivot_df[f'{val}_Dead'] +
-                       1.05 * pivot_df[f'{val}_SDL'] +
-                       1.275 * pivot_df[f'{val}_Live'] +
-                       pivot_df[f'{val}_EX'])
-    combo_dfs['U02'] = df_u02
+    for name, factors in combinations.items():
+        temp_df = pivot_df[group_cols].copy()
+        temp_df['Output Case'] = name
+        for val in value_cols:
+            # เงื่อนไขพิเศษ: ถ้าเป็น V2 หรือ V3 ให้คูณ EX, EY ด้วย 2.5
+            ex_factor = factors['EX']
+            ey_factor = factors['EY']
+            if val in ['V2', 'V3']:
+                ex_factor *= 2.5
+                ey_factor *= 2.5
 
-    # คำนวณ U03: 1.05*Dead + 1.05*SDL + 1.275*Live - EX
-    df_u03 = pivot_df[group_cols].copy()
-    df_u03['Output Case'] = 'U03'
-    for val in value_cols:
-        df_u03[val] = (1.05 * pivot_df[f'{val}_Dead'] +
-                       1.05 * pivot_df[f'{val}_SDL'] +
-                       1.275 * pivot_df[f'{val}_Live'] -
-                       pivot_df[f'{val}_EX'])
-    combo_dfs['U03'] = df_u03
+            temp_df[val] = (factors['Dead'] * pivot_df[f'{val}_Dead'] +
+                            factors['SDL'] * pivot_df[f'{val}_SDL'] +
+                            factors['Live'] * pivot_df[f'{val}_Live'] +
+                            ex_factor * pivot_df[f'{val}_EX'] +
+                            ey_factor * pivot_df[f'{val}_EY'])
+        combo_dfs[name] = temp_df
 
-    # รวมผลลัพธ์ทั้งหมดเข้าด้วยกัน
     result_df = pd.concat(combo_dfs.values(), ignore_index=True)
     
-    # จัดเรียงคอลัมน์ให้เหมือนเดิม
+    # ปรับทศนิยม 4 ตำแหน่ง
+    for col in value_cols:
+        result_df[col] = result_df[col].round(4)
+        
     final_cols = group_cols + ['Output Case'] + value_cols
     result_df = result_df[final_cols]
-
     return result_df
 
 # --- ส่วนของหน้าเว็บ Streamlit ---
@@ -79,20 +76,12 @@ def calculate_combinations(df):
 st.set_page_config(layout="wide")
 st.title('โปรแกรมคำนวณ Load Combination 🏗️')
 
-st.write("""
-อัปโหลดไฟล์ `load.csv` ของคุณเพื่อคำนวณ Load Combination ใหม่ตามสูตร:
-- **U01** = `1.4*Dead + 1.4*SDL + 1.7*Live`
-- **U02** = `1.05*Dead + 1.05*SDL + 1.275*Live + EX`
-- **U03** = `1.05*Dead + 1.05*SDL + 1.275*Live - EX`
-
-โปรแกรมจะทำการ **Group by** จากคอลัมน์ `Story`, `Column`, `Unique Name`, และ `Station`
-""")
+st.write("อัปโหลดไฟล์ `load.csv` ของคุณเพื่อคำนวณ Load Combination")
 
 # สร้างตัวอัปโหลดไฟล์
 uploaded_file = st.file_uploader("เลือกไฟล์ load.csv", type=['csv'])
 
 if uploaded_file is not None:
-    # อ่านไฟล์ CSV ที่อัปโหลด
     try:
         input_df = pd.read_csv(uploaded_file)
         st.success("✔️ อัปโหลดไฟล์สำเร็จแล้ว!")
@@ -100,27 +89,101 @@ if uploaded_file is not None:
         st.subheader("ข้อมูลดิบจากไฟล์ที่อัปโหลด (5 แถวแรก)")
         st.dataframe(input_df.head())
 
-        # เริ่มการคำนวณ
+        # --- ส่วนแสดงผลการคำนวณหลัก ---
+        st.header("1. ผลการคำนวณ Load Combinations (U01 - U09)")
+        with st.expander("แสดง/ซ่อนสูตรที่ใช้คำนวณ"):
+            st.markdown("""
+            - **U01** = `1.4*Dead + 1.4*SDL + 1.7*Live`
+            - **U02** = `1.05*Dead + 1.05*SDL + 1.275*Live + EX`
+            - **U03** = `1.05*Dead + 1.05*SDL + 1.275*Live - EX`
+            - **U04** = `1.05*Dead + 1.05*SDL + 1.275*Live + EY`
+            - **U05** = `1.05*Dead + 1.05*SDL + 1.275*Live - EY`
+            - **U06** = `0.9*Dead + 0.9*SDL + EX`
+            - **U07** = `0.9*Dead + 0.9*SDL - EX`
+            - **U08** = `0.9*Dead + 0.9*SDL + EY`
+            - **U09** = `0.9*Dead + 0.9*SDL - EY`
+            - **หมายเหตุ:** สำหรับค่า `V2` และ `V3` เทอม `EX` และ `EY` จะถูกคูณด้วย **2.5**
+            """)
+
         with st.spinner('กำลังคำนวณ Load Combinations... ⏳'):
-            result_df = calculate_combinations(input_df)
+            main_result_df = calculate_combinations(input_df.copy())
         
         st.success("✔️ คำนวณเสร็จสิ้น!")
-        st.subheader("ผลลัพธ์การคำนวณ (U01, U02, U03)")
-        st.dataframe(result_df)
+        st.dataframe(main_result_df)
 
-        # สร้างปุ่มสำหรับดาวน์โหลดไฟล์ CSV
+        # ฟังก์ชันแปลง DataFrame เป็น CSV สำหรับปุ่มดาวน์โหลด
         @st.cache_data
         def convert_df_to_csv(df):
             return df.to_csv(index=False).encode('utf-8')
 
-        csv_output = convert_df_to_csv(result_df)
-
+        csv_main_output = convert_df_to_csv(main_result_df)
         st.download_button(
-            label="📥 ดาวน์โหลดผลลัพธ์เป็น CSV",
-            data=csv_output,
+            label="📥 ดาวน์โหลดผลลัพธ์หลักเป็น CSV",
+            data=csv_main_output,
             file_name='load_combinations_result.csv',
             mime='text/csv',
         )
+        
+        st.divider()
+
+        # --- ส่วนคำนวณชั้นใต้ดิน ---
+        st.header("2. คำนวณเพิ่มเติมสำหรับชั้นใต้ดิน (Underground Floor)")
+
+        unique_names = input_df['Unique Name'].unique()
+        base_floor_unique_name = st.selectbox(
+            "เลือกชั้นที่จะใช้เป็นฐานในการคำนวณ (จากคอลัมน์ 'Unique Name'):",
+            options=unique_names
+        )
+
+        st.write("กรอกตัวคูณ (Factor) ที่ต้องการสำหรับชั้นใต้ดิน:")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            factor_dead = st.number_input("Factor for Dead Load", min_value=0.0, value=1.0, step=0.1)
+        with col2:
+            factor_sdl = st.number_input("Factor for SDL", min_value=0.0, value=1.0, step=0.1)
+        with col3:
+            factor_live = st.number_input("Factor for Live Load", min_value=0.0, value=1.0, step=0.1)
+
+        if st.button("คำนวณชั้นใต้ดิน", type="primary"):
+            with st.spinner('กำลังสร้างข้อมูลชั้นใต้ดิน... ⏳'):
+                # กรองข้อมูลเฉพาะชั้นที่เลือกมาเป็นฐาน
+                base_floor_df = input_df[input_df['Unique Name'] == base_floor_unique_name].copy()
+                
+                value_cols_ug = ['P', 'V2', 'V3', 'T', 'M2', 'M3']
+                
+                # สร้าง Dictionary ของ factor ตาม Output Case
+                factors_map = {
+                    'Dead': factor_dead,
+                    'SDL': factor_sdl,
+                    'Live': factor_live
+                }
+
+                # สร้างฟังก์ชันเพื่อคูณค่าตาม factor
+                def apply_factors(row):
+                    case = row['Output Case']
+                    if case in factors_map:
+                        row[value_cols_ug] *= factors_map[case]
+                    return row
+
+                # ใช้ .apply เพื่อปรับปรุงค่า
+                ug_df_raw = base_floor_df.apply(apply_factors, axis=1)
+
+                st.subheader("ผลลัพธ์ Load Combinations สำหรับชั้นใต้ดิน")
+                st.write(f"คำนวณโดยใช้ชั้น `{base_floor_unique_name}` เป็นฐาน และเปลี่ยนชื่อ Story เป็น `Underground`")
+                
+                # ส่งข้อมูลดิบของชั้นใต้ดินที่ถูกคูณ factor แล้วไปคำนวณ combinations
+                ug_result_df = calculate_combinations(ug_df_raw, custom_story_name="Underground")
+                st.dataframe(ug_result_df)
+
+                # ปุ่มดาวน์โหลดสำหรับชั้นใต้ดิน
+                csv_ug_output = convert_df_to_csv(ug_result_df)
+                st.download_button(
+                    label="📥 ดาวน์โหลดผลลัพธ์ชั้นใต้ดินเป็น CSV",
+                    data=csv_ug_output,
+                    file_name=f'underground_combinations_from_{base_floor_unique_name}.csv',
+                    mime='text/csv',
+                    key='download_ug'
+                )
 
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการประมวลผลไฟล์: {e}")
