@@ -103,18 +103,15 @@ if uploaded_file is not None:
                 factor_dead, factor_sdl, factor_live = map(float, [factor_dead_str, factor_sdl_str, factor_live_str])
                 
                 with st.spinner('กำลังสร้างข้อมูลชั้นใต้ดิน... ⏳'):
-                    # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: เปลี่ยนตรรกะการคูณค่า Factor ทั้งหมด <<<<<<<<<<<<<<<<<<<<
                     base_floor_df = input_df[input_df['Story'] == base_story].copy()
                     value_cols_ug = ['P', 'V2', 'V3', 'T', 'M2', 'M3']
                     factors_map = {'Dead': factor_dead, 'SDL': factor_sdl, 'Live': factor_live}
                     
                     dfs_to_combine = []
                     
-                    # 1. เก็บส่วนที่ไม่ต้องแก้ไขไว้ก่อน
                     unmodified_mask = ~base_floor_df['Output Case'].isin(factors_map.keys())
                     dfs_to_combine.append(base_floor_df[unmodified_mask])
                     
-                    # 2. แก้ไขเฉพาะส่วนที่ต้องการ
                     for case, factor in factors_map.items():
                         mask = base_floor_df['Output Case'] == case
                         if mask.any():
@@ -122,9 +119,8 @@ if uploaded_file is not None:
                             modified_part[value_cols_ug] *= factor
                             dfs_to_combine.append(modified_part)
                     
-                    # 3. รวมทุกส่วนกลับเข้าด้วยกัน
-                    ug_df_raw = pd.concat(dfs_to_combine, ignore_index=True)
-                    # <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
+                    # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: ทำการ Reset Index ที่นี่ <<<<<<<<<<<<<<<<<<<<
+                    ug_df_raw = pd.concat(dfs_to_combine).reset_index(drop=True)
 
                     st.session_state.ug_result_df = calculate_combinations(ug_df_raw, custom_story_name="Underground")
                     st.success("✔️ คำนวณชั้นใต้ดินเสร็จสิ้น!")
