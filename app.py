@@ -25,30 +25,50 @@ def calculate_combinations(df_input, custom_story_name=None):
 
     combo_dfs = {}
     combinations = {
-        'U01': {'Dead': 1.4, 'SDL': 1.4, 'Live': 1.7, 'EX': 0, 'EY': 0},
-        'U02': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EX': 1, 'EY': 0},
-        'U03': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EX': -1, 'EY': 0},
-        'U04': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EX': 0, 'EY': 1},
-        'U05': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EX': 0, 'EY': -1},
-        'U06': {'Dead': 0.9, 'SDL': 0.9, 'Live': 0, 'EX': 1, 'EY': 0},
-        'U07': {'Dead': 0.9, 'SDL': 0.9, 'Live': 0, 'EX': -1, 'EY': 0},
-        'U08': {'Dead': 0.9, 'SDL': 0.9, 'Live': 0, 'EX': 0, 'EY': 1},
-        'U09': {'Dead': 0.9, 'SDL': 0.9, 'Live': 0, 'EX': 0, 'EY': -1},
+        'U01': {'Dead': 1.4, 'SDL': 1.4, 'Live': 1.7},
+        'U02': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EX': 1},
+        'U03': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EX': -1},
+        'U04': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EY': 1},
+        'U05': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EY': -1},
+        'U06': {'Dead': 0.9, 'SDL': 0.9, 'EX': 1},
+        'U07': {'Dead': 0.9, 'SDL': 0.9, 'EX': -1},
+        'U08': {'Dead': 0.9, 'SDL': 0.9, 'EY': 1},
+        'U09': {'Dead': 0.9, 'SDL': 0.9, 'EY': -1},
     }
 
     for name, factors in combinations.items():
+        # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: สร้างชื่อสูตรแบบเต็ม + ชื่อย่อ <<<<<<<<<<<<<<<<<<<<
+        formula_parts = []
+        ordered_cases = ['Dead', 'SDL', 'Live', 'EX', 'EY']
+        for case in ordered_cases:
+            factor = factors.get(case)
+            if factor:
+                formula_parts.append(f"{factor:+g}{case}")
+        
+        formula_string = "".join(formula_parts).lstrip('+')
+        # สร้างชื่อสุดท้ายโดยมี "U01: " นำหน้า
+        full_formula_name = f"{name}: {formula_string}"
+        # <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
+        
         temp_df = pivot_df[group_cols].copy()
-        temp_df['Output Case'] = name
+        temp_df['Output Case'] = full_formula_name
+        
         for val in value_cols:
-            ex_factor, ey_factor = factors['EX'], factors['EY']
+            dead_f = factors.get('Dead', 0)
+            sdl_f = factors.get('SDL', 0)
+            live_f = factors.get('Live', 0)
+            ex_f = factors.get('EX', 0)
+            ey_f = factors.get('EY', 0)
+            
             if val in ['V2', 'V3']:
-                ex_factor *= 2.5
-                ey_factor *= 2.5
-            temp_df[val] = (factors['Dead'] * pivot_df[f'{val}_Dead'] +
-                            factors['SDL'] * pivot_df[f'{val}_SDL'] +
-                            factors['Live'] * pivot_df[f'{val}_Live'] +
-                            ex_factor * pivot_df[f'{val}_EX'] +
-                            ey_factor * pivot_df[f'{val}_EY'])
+                ex_f *= 2.5
+                ey_f *= 2.5
+                
+            temp_df[val] = (dead_f * pivot_df[f'{val}_Dead'] +
+                            sdl_f * pivot_df[f'{val}_SDL'] +
+                            live_f * pivot_df[f'{val}_Live'] +
+                            ex_f * pivot_df[f'{val}_EX'] +
+                            ey_f * pivot_df[f'{val}_EY'])
         combo_dfs[name] = temp_df
 
     result_df = pd.concat(combo_dfs.values(), ignore_index=True)
@@ -81,7 +101,22 @@ if uploaded_file is not None:
         st.subheader("ข้อมูลดิบจากไฟล์ที่อัปโหลด (5 แถวแรก)")
         st.dataframe(input_df.head())
 
-        st.header("1. ผลการคำนวณ Load Combinations (U01 - U09)")
+        st.header("1. ผลการคำนวณ Load Combinations")
+        
+        with st.expander("แสดง/ซ่อนสูตรที่ใช้คำนวณ"):
+            st.markdown("""
+            - **U01**: `1.4*Dead + 1.4*SDL + 1.7*Live`
+            - **U02**: `1.05*Dead + 1.05*SDL + 1.275*Live + EX`
+            - **U03**: `1.05*Dead + 1.05*SDL + 1.275*Live - EX`
+            - **U04**: `1.05*Dead + 1.05*SDL + 1.275*Live + EY`
+            - **U05**: `1.05*Dead + 1.05*SDL + 1.275*Live - EY`
+            - **U06**: `0.9*Dead + 0.9*SDL + EX`
+            - **U07**: `0.9*Dead + 0.9*SDL - EX`
+            - **U08**: `0.9*Dead + 0.9*SDL + EY`
+            - **U09**: `0.9*Dead + 0.9*SDL - EY`
+            - **หมายเหตุ:** สำหรับค่า `V2` และ `V3` เทอม `EX` และ `EY` จะถูกคูณด้วย **2.5**
+            """)
+
         with st.spinner('กำลังคำนวณ Load Combinations... ⏳'):
             st.session_state.main_result_df = calculate_combinations(input_df)
         st.success("✔️ คำนวณเสร็จสิ้น!")
@@ -119,7 +154,6 @@ if uploaded_file is not None:
                             modified_part[value_cols_ug] *= factor
                             dfs_to_combine.append(modified_part)
                     
-                    # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: ทำการ Reset Index ที่นี่ <<<<<<<<<<<<<<<<<<<<
                     ug_df_raw = pd.concat(dfs_to_combine).reset_index(drop=True)
 
                     st.session_state.ug_result_df = calculate_combinations(ug_df_raw, custom_story_name="Underground")
