@@ -5,12 +5,7 @@ import re
 
 # --- ส่วนของการคำนวณ ---
 def calculate_combinations(df_input, custom_story_name=None):
-    """
-    ฟังก์ชันสำหรับคำนวณ Load Combination จาก DataFrame ที่รับเข้ามา
-    """
-    # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: สร้างสำเนาข้อมูลที่ชัดเจน <<<<<<<<<<<<<<<<<<<<
     df = df_input.copy()
-    
     value_cols = ['P', 'V2', 'V3', 'T', 'M2', 'M3']
     group_cols = ['Story', 'Column', 'Unique Name', 'Station']
     
@@ -29,7 +24,6 @@ def calculate_combinations(df_input, custom_story_name=None):
                 pivot_df[col_name] = 0
 
     combo_dfs = {}
-    
     combinations = {
         'U01': {'Dead': 1.4, 'SDL': 1.4, 'Live': 1.7, 'EX': 0, 'EY': 0},
         'U02': {'Dead': 1.05, 'SDL': 1.05, 'Live': 1.275, 'EX': 1, 'EY': 0},
@@ -46,12 +40,10 @@ def calculate_combinations(df_input, custom_story_name=None):
         temp_df = pivot_df[group_cols].copy()
         temp_df['Output Case'] = name
         for val in value_cols:
-            ex_factor = factors['EX']
-            ey_factor = factors['EY']
+            ex_factor, ey_factor = factors['EX'], factors['EY']
             if val in ['V2', 'V3']:
                 ex_factor *= 2.5
                 ey_factor *= 2.5
-
             temp_df[val] = (factors['Dead'] * pivot_df[f'{val}_Dead'] +
                             factors['SDL'] * pivot_df[f'{val}_SDL'] +
                             factors['Live'] * pivot_df[f'{val}_Live'] +
@@ -60,28 +52,20 @@ def calculate_combinations(df_input, custom_story_name=None):
         combo_dfs[name] = temp_df
 
     result_df = pd.concat(combo_dfs.values(), ignore_index=True)
-    
-    for col in value_cols:
-        result_df[col] = result_df[col].round(4)
-        
+    result_df[value_cols] = result_df[value_cols].round(4)
     final_cols = group_cols + ['Output Case'] + value_cols
-    result_df = result_df[final_cols]
-    return result_df
+    return result_df[final_cols]
 
 # --- ส่วนของหน้าเว็บ Streamlit ---
-# (ส่วนนี้เหมือนเดิมทุกประการ)
 st.set_page_config(layout="wide")
 st.title('โปรแกรมคำนวณ Load Combination 🏗️')
 st.write("อัปโหลดไฟล์ `load.csv` ของคุณเพื่อคำนวณ Load Combination")
 st.info(
     """
     **ข้อแนะนำ:** ไฟล์ CSV ของคุณควรมีคอลัมน์หลักดังต่อไปนี้เพื่อให้โปรแกรมทำงานได้อย่างถูกต้อง:
-    - **`Story`**: ชื่อชั้นของอาคาร
-    - **`Column`**: ชื่อเสา
-    - **`Unique Name`**: ชื่อเฉพาะขององค์อาคาร
-    - **`Station`**: ตำแหน่งบนองค์อาคาร
-    - **`Output Case`**: ประเภทของแรง (เช่น Dead, Live, SDL, EX, EY)
-    - **`P`, `V2`, `V3`, `T`, `M2`, `M3`**: ค่าแรงในแกนต่างๆ
+    - **`Story`**, **`Column`**, **`Unique Name`**, **`Station`**
+    - **`Output Case`** (เช่น Dead, Live, SDL, EX, EY)
+    - **`P`**, **`V2`**, **`V3`**, **`T`**, **`M2`**, **`M3`**
     """
 )
 uploaded_file = st.file_uploader("เลือกไฟล์ load.csv", type=['csv'])
@@ -92,9 +76,7 @@ if uploaded_file is not None:
         st.success("✔️ อัปโหลดไฟล์สำเร็จแล้ว!")
         
         if 'main_result_df' not in st.session_state:
-            st.session_state.main_result_df = None
-        if 'ug_result_df' not in st.session_state:
-            st.session_state.ug_result_df = None
+            st.session_state.main_result_df, st.session_state.ug_result_df = None, None
 
         st.subheader("ข้อมูลดิบจากไฟล์ที่อัปโหลด (5 แถวแรก)")
         st.dataframe(input_df.head())
@@ -102,49 +84,48 @@ if uploaded_file is not None:
         st.header("1. ผลการคำนวณ Load Combinations (U01 - U09)")
         with st.spinner('กำลังคำนวณ Load Combinations... ⏳'):
             st.session_state.main_result_df = calculate_combinations(input_df)
-        
         st.success("✔️ คำนวณเสร็จสิ้น!")
 
         st.header("2. คำนวณเพิ่มเติมสำหรับชั้นใต้ดิน (Underground Floor)")
         stories = sorted(input_df['Story'].unique())
-        base_story = st.selectbox(
-            "เลือกชั้นที่จะใช้เป็นฐานในการคำนวณ (จากคอลัมน์ 'Story'):",
-            options=stories
-        )
+        base_story = st.selectbox("เลือกชั้นที่จะใช้เป็นฐานในการคำนวณ:", options=stories)
 
         st.write("กรอกตัวคูณ (Factor) ที่ต้องการสำหรับชั้นใต้ดิน:")
         col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            factor_dead_str = st.text_input("Factor for Dead Load", value="1.0")
-        with col2:
-            factor_sdl_str = st.text_input("Factor for SDL", value="1.0")
-        with col3:
-            factor_live_str = st.text_input("Factor for Live Load", value="1.0")
-
+        with col1: factor_dead_str = st.text_input("Factor for Dead Load", "1.0")
+        with col2: factor_sdl_str = st.text_input("Factor for SDL", "1.0")
+        with col3: factor_live_str = st.text_input("Factor for Live Load", "1.0")
         merge_results = st.checkbox("รวมผลลัพธ์ของชั้นใต้ดินกับตารางผลลัพธ์หลัก")
 
         if st.button("คำนวณชั้นใต้ดิน", type="primary"):
             pattern = re.compile(r"^\d+(\.\d{1,2})?$")
-            is_valid = pattern.match(factor_dead_str) and pattern.match(factor_sdl_str) and pattern.match(factor_live_str)
-
-            if is_valid:
-                factor_dead = float(factor_dead_str)
-                factor_sdl = float(factor_sdl_str)
-                factor_live = float(factor_live_str)
+            if all(pattern.match(s) for s in [factor_dead_str, factor_sdl_str, factor_live_str]):
+                factor_dead, factor_sdl, factor_live = map(float, [factor_dead_str, factor_sdl_str, factor_live_str])
                 
                 with st.spinner('กำลังสร้างข้อมูลชั้นใต้ดิน... ⏳'):
-                    base_floor_df = input_df[input_df['Story'] == base_story]
+                    # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: เปลี่ยนตรรกะการคูณค่า Factor ทั้งหมด <<<<<<<<<<<<<<<<<<<<
+                    base_floor_df = input_df[input_df['Story'] == base_story].copy()
                     value_cols_ug = ['P', 'V2', 'V3', 'T', 'M2', 'M3']
                     factors_map = {'Dead': factor_dead, 'SDL': factor_sdl, 'Live': factor_live}
+                    
+                    dfs_to_combine = []
+                    
+                    # 1. เก็บส่วนที่ไม่ต้องแก้ไขไว้ก่อน
+                    unmodified_mask = ~base_floor_df['Output Case'].isin(factors_map.keys())
+                    dfs_to_combine.append(base_floor_df[unmodified_mask])
+                    
+                    # 2. แก้ไขเฉพาะส่วนที่ต้องการ
+                    for case, factor in factors_map.items():
+                        mask = base_floor_df['Output Case'] == case
+                        if mask.any():
+                            modified_part = base_floor_df[mask].copy()
+                            modified_part[value_cols_ug] *= factor
+                            dfs_to_combine.append(modified_part)
+                    
+                    # 3. รวมทุกส่วนกลับเข้าด้วยกัน
+                    ug_df_raw = pd.concat(dfs_to_combine, ignore_index=True)
+                    # <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
 
-                    def apply_factors(row):
-                        case = row['Output Case']
-                        if case in factors_map:
-                            row[value_cols_ug] *= factors_map[case]
-                        return row
-
-                    ug_df_raw = base_floor_df.apply(apply_factors, axis=1)
                     st.session_state.ug_result_df = calculate_combinations(ug_df_raw, custom_story_name="Underground")
                     st.success("✔️ คำนวณชั้นใต้ดินเสร็จสิ้น!")
             else:
@@ -154,10 +135,9 @@ if uploaded_file is not None:
         st.divider()
         st.header("3. ผลลัพธ์ทั้งหมด")
         
-        final_df_to_display = st.session_state.main_result_df.copy() if st.session_state.main_result_df is not None else None
-
+        final_df = st.session_state.main_result_df.copy() if st.session_state.main_result_df is not None else None
         if merge_results and st.session_state.ug_result_df is not None:
-            final_df_to_display = pd.concat([st.session_state.main_result_df, st.session_state.ug_result_df], ignore_index=True)
+            final_df = pd.concat([st.session_state.main_result_df, st.session_state.ug_result_df], ignore_index=True)
             st.info("ตารางแสดงผลลัพธ์หลัก **รวมกับ** ผลลัพธ์ของชั้นใต้ดิน")
             file_name = "load_combinations_combined_result.csv"
         else:
@@ -167,20 +147,13 @@ if uploaded_file is not None:
                 st.dataframe(st.session_state.ug_result_df)
             file_name = "load_combinations_result.csv"
 
-        st.dataframe(final_df_to_display)
+        st.dataframe(final_df)
 
         @st.cache_data
-        def convert_df_to_csv(df):
-            return df.to_csv(index=False).encode('utf-8')
+        def convert_df_to_csv(df): return df.to_csv(index=False).encode('utf-8')
         
-        if final_df_to_display is not None:
-            csv_output = convert_df_to_csv(final_df_to_display)
-            st.download_button(
-                label="📥 ดาวน์โหลดผลลัพธ์ทั้งหมดเป็น CSV",
-                data=csv_output,
-                file_name=file_name,
-                mime='text/csv',
-            )
+        if final_df is not None:
+            st.download_button("📥 ดาวน์โหลดผลลัพธ์ทั้งหมดเป็น CSV", convert_df_to_csv(final_df), file_name, 'text/csv')
             
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการประมวลผลไฟล์: {e}")
