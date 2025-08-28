@@ -3,12 +3,17 @@ import pandas as pd
 import numpy as np
 import re
 
-# --- ส่วนของการคำนวณ ---
-# (ฟังก์ชัน calculate_combinations เหมือนเดิมทุกประการ)
-def calculate_combinations(df_input, custom_story_name=None):
+# --- ส่วนของการคำนวณ (ปรับปรุงให้รับ Mode) ---
+def calculate_combinations(df_input, custom_story_name=None, mode='Column'):
     df = df_input.copy()
     value_cols = ['P', 'V2', 'V3', 'T', 'M2', 'M3']
-    group_cols = ['Story', 'Column', 'Unique Name', 'Station']
+    
+    # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: เปลี่ยน Grouping Columns ตาม Mode <<<<<<<<<<<<<<<<<<<<
+    if mode == 'Column':
+        group_cols = ['Story', 'Column', 'Unique Name', 'Station']
+    else: # Wall
+        group_cols = ['Story', 'Pier', 'Location']
+    # <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
     
     if custom_story_name:
         df['Story'] = custom_story_name
@@ -71,40 +76,70 @@ def calculate_combinations(df_input, custom_story_name=None):
 # --- ส่วนของหน้าเว็บ Streamlit ---
 st.set_page_config(layout="wide")
 st.title('โปรแกรมคำนวณ Load Combination 🏗️')
-st.write("อัปโหลดไฟล์ `load.csv` ของคุณเพื่อคำนวณ Load Combination")
-st.info(
-    """
-    **ข้อแนะนำ:** ไฟล์ CSV ของคุณควรมีคอลัมน์หลักดังต่อไปนี้:
-    - **`Story`**, **`Column`**, **`Unique Name`**, **`Station`**
-    - **`Output Case`** (ต้องมีค่า: Dead, Live, SDL, EX, EY เป็นอย่างน้อย)
-    - **`P`**, **`V2`**, **`V3`**, **`T`**, **`M2`**, **`M3`**
-    """
+
+# <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: เพิ่มปุ่มเลือก Mode <<<<<<<<<<<<<<<<<<<<
+mode = st.radio(
+    "เลือกโหมดการคำนวณ:",
+    ('Column', 'Wall'),
+    horizontal=True,
+    help="เลือก 'Column' หากไฟล์ของคุณมีคอลัมน์ Unique Name, Station | เลือก 'Wall' หากไฟล์ของคุณมีคอลัมน์ Pier, Location"
 )
-uploaded_file = st.file_uploader("เลือกไฟล์ load.csv", type=['csv'])
+st.write("---")
+# <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
+
+st.write("อัปโหลดไฟล์ CSV ของคุณเพื่อคำนวณ Load Combination")
+
+# <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: เปลี่ยนคำแนะนำตาม Mode <<<<<<<<<<<<<<<<<<<<
+if mode == 'Column':
+    st.info(
+        """
+        **โหมด Column:** ไฟล์ CSV ของคุณควรมีคอลัมน์หลักดังต่อไปนี้:
+        - **`Story`**, **`Column`**, **`Unique Name`**, **`Station`**
+        - **`Output Case`** (ต้องมีค่า: Dead, Live, SDL, EX, EY เป็นอย่างน้อย)
+        - **`P`**, **`V2`**, **`V3`**, **`T`**, **`M2`**, **`M3`**
+        """
+    )
+    required_cols = {'Story', 'Column', 'Unique Name', 'Station', 'Output Case', 'P', 'V2', 'V3', 'T', 'M2', 'M3'}
+else: # Wall Mode
+    st.info(
+        """
+        **โหมด Wall:** ไฟล์ CSV ของคุณควรมีคอลัมน์หลักดังต่อไปนี้:
+        - **`Story`**, **`Pier`**, **`Location`**
+        - **`Output Case`** (ต้องมีค่า: Dead, Live, SDL, EX, EY เป็นอย่างน้อย)
+        - **`P`**, **`V2`**, **`V3`**, **`T`**, **`M2`**, **`M3`**
+        """
+    )
+    required_cols = {'Story', 'Pier', 'Location', 'Output Case', 'P', 'V2', 'V3', 'T', 'M2', 'M3'}
+# <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
+
+uploaded_file = st.file_uploader(f"เลือกไฟล์สำหรับโหมด {mode}", type=['csv'])
 
 if uploaded_file is not None:
     try:
         input_df = pd.read_csv(uploaded_file)
         
-        if 'Output Case' not in input_df.columns:
-            st.error("🚨 ไม่พบคอลัมน์ 'Output Case' ในไฟล์ที่อัปโหลด!")
+        # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: ตรวจสอบคอลัมน์ตาม Mode <<<<<<<<<<<<<<<<<<<<
+        if not required_cols.issubset(input_df.columns):
+            missing_cols = required_cols - set(input_df.columns)
+            st.error(f"🚨 ไฟล์ของคุณขาดคอลัมน์ที่จำเป็นสำหรับโหมด {mode}: **{', '.join(missing_cols)}**")
             st.stop()
-        
+        # <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
+
         input_df['Output Case'] = input_df['Output Case'].str.strip()
         allowed_cases = ['Dead', 'Live', 'SDL', 'EX', 'EY']
         input_df = input_df[input_df['Output Case'].isin(allowed_cases)]
         st.success("✔️ อัปโหลดไฟล์สำเร็จแล้ว!")
         
         st.subheader("ตรวจสอบไฟล์เบื้องต้น")
-        required_cases = {'Dead', 'Live', 'SDL', 'EX', 'EY'}
+        required_oc_cases = {'Dead', 'Live', 'SDL', 'EX', 'EY'}
         uploaded_cases = set(input_df['Output Case'].unique())
-        missing_cases = required_cases - uploaded_cases
+        missing_oc_cases = required_oc_cases - uploaded_cases
         
-        if not missing_cases:
+        if not missing_oc_cases:
             st.success("✔️ พบ Output Case ที่จำเป็นครบถ้วน")
             can_proceed = True
         else:
-            st.error(f"🚨 พบว่าขาด Output Case ที่จำเป็น: **{', '.join(sorted(list(missing_cases)))}**")
+            st.error(f"🚨 พบว่าขาด Output Case ที่จำเป็น: **{', '.join(sorted(list(missing_oc_cases)))}**")
             st.warning("กรุณาตรวจสอบไฟล์ CSV ของคุณและอัปโหลดใหม่อีกครั้ง")
             can_proceed = False
 
@@ -115,8 +150,6 @@ if uploaded_file is not None:
             st.subheader("ข้อมูลดิบจากไฟล์ที่อัปโหลด (หลังกรองแล้ว)")
             st.dataframe(input_df.head())
             st.header("1. ผลการคำนวณ Load Combinations")
-            
-            # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: แสดงสูตรทั้งหมด ไม่ย่อแล้ว! <<<<<<<<<<<<<<<<<<<<
             with st.expander("แสดง/ซ่อนสูตรที่ใช้คำนวณ"):
                 st.markdown("""
                 - **U01**: `1.4*Dead + 1.4*SDL + 1.7*Live`
@@ -130,10 +163,10 @@ if uploaded_file is not None:
                 - **U09**: `0.9*Dead + 0.9*SDL - EY`
                 - **หมายเหตุ:** สำหรับค่า `V2` และ `V3` เทอม `EX` และ `EY` จะถูกคูณด้วย **2.5**
                 """)
-            # <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
             
             with st.spinner('กำลังคำนวณ Load Combinations... ⏳'):
-                st.session_state.main_result_df = calculate_combinations(input_df)
+                # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: ส่ง mode เข้าไปในฟังก์ชัน <<<<<<<<<<<<<<<<<<<<
+                st.session_state.main_result_df = calculate_combinations(input_df, mode=mode)
             st.success("✔️ คำนวณเสร็จสิ้น!")
 
             st.header("2. คำนวณเพิ่มเติมสำหรับชั้นใต้ดิน (Underground Floor)")
@@ -163,7 +196,8 @@ if uploaded_file is not None:
                                 modified_part[value_cols_ug] *= factor
                                 dfs_to_combine.append(modified_part)
                         ug_df_raw = pd.concat(dfs_to_combine).reset_index(drop=True)
-                        st.session_state.ug_result_df = calculate_combinations(ug_df_raw, custom_story_name="Underground")
+                        # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข: ส่ง mode เข้าไปในฟังก์ชัน <<<<<<<<<<<<<<<<<<<<
+                        st.session_state.ug_result_df = calculate_combinations(ug_df_raw, custom_story_name="Underground", mode=mode)
                         st.success("✔️ คำนวณชั้นใต้ดินเสร็จสิ้น!")
                 else:
                     st.error("🚨 รูปแบบตัวเลขไม่ถูกต้อง!")
