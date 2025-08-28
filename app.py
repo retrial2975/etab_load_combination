@@ -14,7 +14,9 @@ def calculate_combinations(df, custom_story_name=None):
     group_cols = ['Story', 'Column', 'Unique Name', 'Station']
     
     # ถ้ามีการระบุชื่อ Story ใหม่ (สำหรับชั้นใต้ดิน) ให้ใช้ชื่อนั้น
+    # และเนื่องจาก Story ถูกใช้เป็น Group Key เราจะสร้างคอลัมน์ใหม่ชั่วคราว
     if custom_story_name:
+        df['Original_Story_for_UG'] = df['Story']
         df['Story'] = custom_story_name
         
     pivot_df = df.pivot_table(index=group_cols, columns='Output Case', values=value_cols, fill_value=0)
@@ -129,11 +131,13 @@ if uploaded_file is not None:
         # --- ส่วนคำนวณชั้นใต้ดิน ---
         st.header("2. คำนวณเพิ่มเติมสำหรับชั้นใต้ดิน (Underground Floor)")
 
-        unique_names = input_df['Unique Name'].unique()
-        base_floor_unique_name = st.selectbox(
-            "เลือกชั้นที่จะใช้เป็นฐานในการคำนวณ (จากคอลัมน์ 'Unique Name'):",
-            options=unique_names
+        # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
+        stories = sorted(input_df['Story'].unique())
+        base_story = st.selectbox(
+            "เลือกชั้นที่จะใช้เป็นฐานในการคำนวณ (จากคอลัมน์ 'Story'):",
+            options=stories
         )
+        # <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
 
         st.write("กรอกตัวคูณ (Factor) ที่ต้องการสำหรับชั้นใต้ดิน:")
         col1, col2, col3 = st.columns(3)
@@ -146,30 +150,30 @@ if uploaded_file is not None:
 
         if st.button("คำนวณชั้นใต้ดิน", type="primary"):
             with st.spinner('กำลังสร้างข้อมูลชั้นใต้ดิน... ⏳'):
+                # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
                 # กรองข้อมูลเฉพาะชั้นที่เลือกมาเป็นฐาน
-                base_floor_df = input_df[input_df['Unique Name'] == base_floor_unique_name].copy()
+                base_floor_df = input_df[input_df['Story'] == base_story].copy()
+                # <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
                 
                 value_cols_ug = ['P', 'V2', 'V3', 'T', 'M2', 'M3']
                 
-                # สร้าง Dictionary ของ factor ตาม Output Case
                 factors_map = {
                     'Dead': factor_dead,
                     'SDL': factor_sdl,
                     'Live': factor_live
                 }
 
-                # สร้างฟังก์ชันเพื่อคูณค่าตาม factor
                 def apply_factors(row):
                     case = row['Output Case']
                     if case in factors_map:
                         row[value_cols_ug] *= factors_map[case]
                     return row
 
-                # ใช้ .apply เพื่อปรับปรุงค่า
                 ug_df_raw = base_floor_df.apply(apply_factors, axis=1)
 
                 st.subheader("ผลลัพธ์ Load Combinations สำหรับชั้นใต้ดิน")
-                st.write(f"คำนวณโดยใช้ชั้น `{base_floor_unique_name}` เป็นฐาน และเปลี่ยนชื่อ Story เป็น `Underground`")
+                # <<<<<<<<<<<<<<<<<<<< จุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
+                st.write(f"คำนวณโดยใช้ชั้น `{base_story}` เป็นฐาน และเปลี่ยนชื่อ Story เป็น `Underground`")
                 
                 # ส่งข้อมูลดิบของชั้นใต้ดินที่ถูกคูณ factor แล้วไปคำนวณ combinations
                 ug_result_df = calculate_combinations(ug_df_raw, custom_story_name="Underground")
@@ -180,10 +184,11 @@ if uploaded_file is not None:
                 st.download_button(
                     label="📥 ดาวน์โหลดผลลัพธ์ชั้นใต้ดินเป็น CSV",
                     data=csv_ug_output,
-                    file_name=f'underground_combinations_from_{base_floor_unique_name}.csv',
+                    file_name=f'underground_combinations_from_{base_story.replace(" ", "_")}.csv',
                     mime='text/csv',
                     key='download_ug'
                 )
+                # <<<<<<<<<<<<<<<<<<<< สิ้นสุดจุดที่แก้ไข <<<<<<<<<<<<<<<<<<<<
 
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการประมวลผลไฟล์: {e}")
